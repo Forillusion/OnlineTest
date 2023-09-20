@@ -1,1 +1,955 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>AIRCON</title>
+        <style type="text/css">   
+			body{ 
+				font-size:20px;
+			}  
 
+            table,tr,td,th{
+                font-size: 13px;
+                border:1px solid silver;
+                text-align: center;
+            }
+
+            .button{
+                box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.12), 0 2px 2px 0 rgba(0, 0, 0, 0.24);
+                transition: box-shadow 0.2s ease;
+                background: #fff;
+                color: #212121;
+                font-size: 20px;
+                text-overflow: ellipsis;
+                animation-delay: 5s;
+                animation-duration: 50s;
+                animation-iteration-count: infinite;
+                animation-name: shake;
+                animation-timing-function: ease-in-out;
+                transition: transform 0.2s ease-in;
+                right: 0;
+                overflow: hidden;
+                width: 90px;
+                height: 30px;
+                border: 1px solid rgba(132, 132, 132, 0.4);
+                border-radius: 12px;
+                text-align: center;
+                cursor: pointer;
+                padding: 0;
+            }
+
+            .select{
+                box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.12), 0 2px 2px 0 rgba(0, 0, 0, 0.24);
+                transition: box-shadow 0.2s ease;
+                background: #fff;
+                color: #212121;
+                font-size: 20px;
+                text-overflow: ellipsis;
+                animation-delay: 5s;
+                animation-duration: 50s;
+                animation-iteration-count: infinite;
+                animation-name: shake;
+                animation-timing-function: ease-in-out;
+                transition: transform 0.2s ease-in;
+                right: 0;
+                overflow: hidden;
+                width: 70px;
+                height: 30px;
+                border: 1px solid rgba(132, 132, 132, 0.4);
+                border-radius: 6px;
+                text-align: center;
+                cursor: pointer;
+            }
+
+		</style>
+
+        <script src="https://forillusion-bucket.cdn.bcebos.com/sakura/js/mqtt.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.8.0/Chart.min.js"> </script>
+        <script>
+            window.onload = function()
+            {
+            }
+            var IP='';
+            const connectUrl = 'wss://xfe5efc4.ala.cn-hangzhou.emqxsl.cn:8084/mqtt';
+            var date=new Date();
+            const options = {
+                connectTimeout: 4000,
+                reconnectPeriod: 1000,
+                clientId: 'web-'+date.getTime().toString(16).substring(5),
+                username: 'Forillusion',
+                password: 'for5177508',
+                clean: true,
+            };
+
+            var client;
+            var defaultTopic;
+            var msg;
+            var time2;
+            const qos=0;
+
+            function getIPAddress() 
+            {
+                return fetch("https://api.ipify.org?format=json")      
+                    .then(response => response.json())      
+                        .then(data => {        
+                            options.clientId = options.clientIdHead+'-'+data.ip;
+                            options.clientId += '-' + Math.random().toString(16).substring(2, 6); 
+                        })      
+                        .catch(error => {        
+                    console.log("Error:", error);      
+                });  
+            }
+            
+
+            mqttConnect();
+            function mqttConnect() {    
+                client = mqtt.connect(connectUrl, options);
+
+                client.on('error', (error) => {
+                    console.log('连接失败: ', error);
+                    client.end();
+                });
+
+                client.on('reconnect', () => {
+                    console.log('重连中...');
+                });
+
+                client.on('connect', () => {
+                    console.log('连接成功:' + options.clientId);
+                });
+
+                client.on("close", () => {
+                    console.log('已经断开连接');
+                });
+
+                client.on('message', (topic, Msg) => {
+                    console.log('收到消息：');
+                    console.log('  主题：', topic);
+                    console.log('  消息：', Msg.toString());
+                    document.getElementById("msgReceive").innerHTML = Msg.toString();
+                    msg=Msg.toString();
+                });
+
+                setDefaultTopic("aircon");
+                subscribe();
+
+                askLastControl();
+            }
+
+            function setDefaultTopic(topic){   //设置默认主题
+                defaultTopic = topic;
+            }
+
+            function subscribe(topic=defaultTopic){   //订阅主题
+                client.subscribe(topic, {qos} ,(error) => {
+                    if (error) {
+                        console.log('订阅失败：',error);
+                        return;
+                    }
+                    console.log('订阅主题：', topic);
+                });
+            }
+
+            function unsubscribe(topic=defaultTopic){   //取消订阅主题
+                client.unsubscribe(topic, {qos}, (error) => {
+                    if (error) {
+                        console.log('取消订阅失败：', error);
+                        return;
+                    }
+                    console.log('取消订阅主题：', topic);
+                });
+            }
+            
+            function publish(payload, topic=defaultTopic){   //发布消息
+                client.publish(topic, payload, { qos }, (error) => {
+                    if (error) {
+                        console.log('发布失败：',error);
+                        document.getElementById("msgSend").innerHTML = "发送失败："+payload;
+                        return;
+                    }
+                    console.log('发布成功：');
+                    console.log('  主题：', topic);
+                    console.log('  消息：', payload);
+                    document.getElementById("msgSend").innerHTML = payload;
+                });
+            }
+
+            function disconnect()   //断开连接
+            {
+                if (client.connected) {
+                    try {
+                        client.end(false, () => {
+                        console.log('断开连接')
+                        })
+                    } catch (error) {
+                        console.log('断开连接失败:', error)
+                    }
+                }
+            }
+
+            function getTime()
+            {
+                var date = new Date();
+                var month = date.getMonth()+1;
+				month=month<10?"0"+month:month;
+				var day = date.getDate();
+				day=day<10?"0"+day:day;
+				var week = date.getDay();
+				var hour = date.getHours();
+				hour= hour<10?"0"+ hour: hour;
+				var minute = date.getMinutes();
+				minute=minute<10?"0"+minute:minute;
+				var second = date.getSeconds();
+				second=second<10?"0"+second:second;
+				var result = month+day+hour+minute+second+"";
+                time2 = month+"-"+day+" "+hour+":"+minute+":"+second;
+                return result;
+            }
+
+
+            function ask()
+            {
+                var time=getTime();
+                var payload=time+"state";
+                publish(payload);
+                setTimeout(function () {
+                    if (msg==(time+"online")) console.log("esp8266在线");
+                    else console.log("esp8266不在线");
+                }, 1000);
+            }
+
+            function openair()
+            {
+                var time=getTime();
+                var payload=time+"on"+
+                    document.getElementById('temp').value+
+                    document.getElementById('fan').value+
+                    document.getElementById('turbo').value+
+                    document.getElementById('mode').value+
+                    document.getElementById('autoTemp').value;
+                    
+                // var payload=time+"on";
+                publish(payload);
+                setTimeout(function () {
+                    if (msg==(time+"okon")) 
+                    {
+                        console.log("执行成功");
+                        var lastControl=time2+" ";
+                        lastControl+="开机  ";
+                        if (document.getElementById('mode').value==0) lastControl+="自动  ";
+                        if (document.getElementById('mode').value==1) lastControl+="制冷  ";
+                        if (document.getElementById('mode').value==2) lastControl+="除湿  ";
+                        if (document.getElementById('mode').value==3) lastControl+="送风  ";
+                        if (document.getElementById('mode').value==4) lastControl+="制热  ";
+                        lastControl+=document.getElementById('temp').value+"度  ";
+                        lastControl+=document.getElementById('fan').value+"级风  ";
+                        if (document.getElementById('turbo').value==0) lastControl+="不开启强劲  ";
+                        else lastControl+="强劲  ";
+                        if (document.getElementById('autoTemp').value=="00") lastControl+="不设置自动恒温  ";
+                        else lastControl+=document.getElementById('autoTemp').value+"度自动恒温  ";
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("lastC").innerHTML = lastControl;
+                        document.getElementById("success").innerHTML = "执行成功";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                    else if (msg==(time+"erron")) 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("success").innerHTML = "执行失败";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("success").innerHTML = "执行失败";
+                        document.getElementById("state").innerHTML = "离线";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function closeair()
+            {
+                var time=getTime();
+                var payload=time+"off";
+                publish(payload);
+                setTimeout(function () {
+                    if (msg==(time+"okoff")) 
+                    {
+                        console.log("执行成功");
+                        var lastControl=time2+" 关机";
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("lastC").innerHTML = lastControl;
+                        document.getElementById("success").innerHTML = "执行成功";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                    else if (msg==(time+"erroff")) 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("success").innerHTML = "执行失败";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("success").innerHTML = "执行失败";
+                        document.getElementById("state").innerHTML = "离线";
+                        setTimeout(function (){document.getElementById("success").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function askLastControl()
+            {
+                var time=getTime();
+                var payload=time+"last";
+                publish(payload);
+                state=1;
+                setTimeout(function () 
+                {
+                    if (msg.substring(0,4)=="last")
+                    {
+                        var lastControl;
+                        if (msg.substring(4,6)=="no") 
+                        {
+                            msg1=msg.split("|");
+                            document.getElementById("tem").innerHTML=msg1[0].substring(6);
+                            lastControl ="无记录 ";
+                        }
+                        else {
+                            lastControl=msg[4]+msg[5]+"-"+
+                            msg[6]+msg[7]+" "+
+                            msg[8]+msg[9]+":"+
+                            msg[10]+msg[11]+":"+
+                            msg[12]+msg[13]+"  ";
+                            if (msg.substring(14,16)=="on"||msg.substring(14,16)=="oo"||msg.substring(14,16)=="or") {
+                                if (msg.substring(14,16)=="on") lastControl+="开机  ";
+                                if (msg.substring(14,16)=="oo") lastControl+="单次计划开机  ";
+                                if (msg.substring(14,16)=="or") lastControl+="重复计划开机  ";
+                                if (msg[20]==0) lastControl+="自动  ";
+                                if (msg[20]==1) lastControl+="制冷  ";
+                                if (msg[20]==2) lastControl+="除湿  ";
+                                if (msg[20]==3) lastControl+="送风  ";
+                                if (msg[20]==4) lastControl+="制热  ";
+                                lastControl+=msg.substring(16,18)+"度  ";
+                                if (msg[18]==0) lastControl+="风速自动  ";
+                                else lastControl+=msg[18]+"级风  ";
+                                if (msg[19]==0) lastControl+="不开启强劲  ";
+                                else lastControl+="强劲  ";
+                                if (msg[21]=="0") lastControl+="不设置自动恒温  ";
+                                else lastControl+=msg.substring(21,23)+"度自动恒温  ";
+
+                                msg1=msg.split("|");
+                                document.getElementById("tem").innerHTML=msg1[0].substring(23);
+                            }
+                        
+                            if (msg.substring(14,17)=="off"||msg.substring(14,17)=="ofn"||msg.substring(14,17)=="ofo"||msg.substring(14,17)=="ofr") 
+                            {
+                                msg1=msg.split("|");
+                                document.getElementById("tem").innerHTML=msg1[0].substring(17);
+                                if (msg.substring(14,17)=="off") lastControl+="关机 ";
+                                if (msg.substring(14,17)=="ofn") lastControl+="按钮关机 ";
+                                if (msg.substring(14,17)=="ofo") lastControl+="单次计划关机 ";
+                                if (msg.substring(14,17)=="ofr") lastControl+="重复计划关机 ";
+                            }
+                        }
+                        console.log(lastControl);
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("lastC").innerHTML = lastControl;
+
+                        msg1=msg.split("|");
+                        lastTem=msg1[1].split(",");
+
+                        var date = new Date();
+                        var hour = date.getHours();
+                        var minute = date.getMinutes();
+                        var timeSum=parseInt((hour*6+minute/10).toString());
+                        var label=[];
+                        for (i=19;i>=0;i--)
+                        {
+                            var lh=parseInt(((timeSum-i)/6).toString());
+                            var lm=parseInt(((timeSum-i)%6*10).toString());
+                            lm= lm<10?"0"+ lm: lm;
+                            label[19-i]=lh+":"+lm;
+                        }
+
+
+                        var ctx = document.getElementById('myChart').getContext('2d');
+                        var chart = new Chart(ctx,{
+                            type: 'line',
+                            data:{
+                                labels: label,
+                                datasets: [
+                                    {
+                                        label: "温度记录",
+                                        fill: true,
+                                        lineTension: 1,
+                                        data: lastTem,
+                                        borderColor: 'rgba(189,211,154,1)',
+                                        backgroundColor: 'rgba(189,211,154,0.5)',
+                                        fill: false,
+                                        lineTension: 0,
+                                    }
+                                ],
+                            },
+                            options: {
+                                scales: {
+                                    yAxes: [{
+                                        ticks: {
+                                            min: 20,
+                                            max: 34
+                                        }
+                                    }]
+                                }
+                            }
+                        });
+
+                        var espWeeks=["日","一","二","三","四","五","六"];
+                        var espMonths=["一","二","三","四","五","六","七","八","九","十","十一","十二"];
+                        var espDate=msg1[2].substring(1,3)+"月"+msg1[2].substring(3,5)+"日 星期"+espWeeks[parseInt(msg1[2].substring(0,1))];
+                        document.getElementById("espDate").innerHTML = espDate;
+
+                        // analysis(msg1[3],msg1[4]);
+                        asktastlist();
+                    }
+                    else
+                     {
+                        document.getElementById("state").innerHTML = "离线";
+                        document.getElementById("lastC").innerHTML = "设备不在线";
+                        document.getElementById("tem").innerHTML = "未获取";
+                     }
+                }, 2000);
+            }
+
+            function rest()
+            {
+                var time=getTime();
+                var payload=time+"rest";
+                publish(payload);
+                state=1;
+                document.getElementById("state").innerHTML = "复位中";
+                document.getElementById("successDebug").innerHTML = "复位中";
+                setTimeout(function () {
+                    if (msg==("connected")) 
+                    {
+                        console.log("esp8266复位成功");
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("successDebug").innerHTML = "复位成功";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                        document.getElementById("lastC").innerHTML = "获取中...";
+                        document.getElementById("tem").innerHTML = "获取中...";
+                        document.getElementById("espDate").innerHTML = "获取中...";
+                        askLastControl();
+                    }
+                    else {
+                        document.getElementById("state").innerHTML = "离线";
+                        document.getElementById("successDebug").innerHTML = "复位失败";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                    }
+                }, 8000);
+            }
+
+            function refresh()
+            {
+                document.getElementById("lastC").innerHTML = "获取中...";
+                document.getElementById("tem").innerHTML = "获取中...";
+                document.getElementById("espDate").innerHTML = "获取中...";
+                askLastControl();
+            }
+
+            function setWeek()
+            {
+                var time=getTime();
+                var payload=time+"setWeek"+document.getElementById('setWeek').value;
+                publish(payload);
+                setTimeout(function () {
+                    if (msg==(time+"oksetWeek")) 
+                    {
+                        console.log("设置成功");
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("successDebug").innerHTML = "设置成功";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("successDebug").innerHTML = "设置失败";
+                        document.getElementById("state").innerHTML = "离线";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function taskType()
+            {
+                if (document.getElementById("taskTypeO").checked)
+                {
+                    var date=new Date();
+                    document.getElementById("setESPTime1").value = String(date.getFullYear())+"-"+
+                    ((date.getMonth()+1)<10?"0"+String(date.getMonth()+1):String(date.getMonth()+1))+"-"+
+                    ((date.getDate())<10?"0"+String(date.getDate()):String(date.getDate()))+"T"+
+                    ((date.getHours()+1)<10?"0"+String(date.getHours()):String(date.getHours()))+":"+
+                    ((date.getMinutes()+1)<10?"0"+String(date.getMinutes()):String(date.getMinutes()));
+
+                    document.getElementById("taskTypeOSetTime").style.display = "block";
+                    document.getElementById("taskChoseAirOpen").style.display = "block";
+                    document.getElementById("taskSub").style.display = "block";
+                }
+                else 
+                {
+                    document.getElementById("taskTypeOSetTime").style.display = "none";
+                }
+
+                if (document.getElementById("taskTypeR").checked)
+                {
+                    var date=new Date();
+                    document.getElementById("setESPTime2").value = 
+                    ((date.getHours()+1)<10?"0"+String(date.getHours()):String(date.getHours()))+":"+
+                    ((date.getMinutes()+1)<10?"0"+String(date.getMinutes()):String(date.getMinutes()));
+
+                    document.getElementById("taskTypeRSetTime").style.display = "block";
+                    document.getElementById("taskTypeRSetWeek").style.display = "block";
+                    document.getElementById("taskChoseAirOpen").style.display = "block";
+                    document.getElementById("taskSub").style.display = "block";
+                }
+                else 
+                {
+                    document.getElementById("taskTypeRSetTime").style.display = "none";
+                    document.getElementById("taskTypeRSetWeek").style.display = "none";
+                }
+            }
+
+            function subTask()
+            {
+                var payload;
+                var time=getTime();
+
+                if (document.getElementById("taskTypeO").checked)
+                {
+                    var tasktime=document.getElementById("setESPTime1").value;
+                    payload=time+"add"+"o"+
+                        tasktime.substring(5,7)+
+                        tasktime.substring(8,10)+
+                        tasktime.substring(11,13)+
+                        tasktime.substring(14,16);
+                    if (document.getElementById('choseAirOpen').value=="1")
+                    {
+                        payload+="on"+
+                            document.getElementById('temp').value+
+                            document.getElementById('fan').value+
+                            document.getElementById('turbo').value+
+                            document.getElementById('mode').value+
+                            document.getElementById('autoTemp').value;
+                    }
+                    else payload+="off";
+                }
+                else 
+                {
+                    var tasktime=document.getElementById("setESPTime2").value;
+                    payload=time+"add"+"r"+
+                        tasktime.substring(0,2)+
+                        tasktime.substring(3,5);
+
+                    if (document.getElementById('setWeek0').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek1').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek2').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek3').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek4').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek5').checked) payload+="1"; else payload+="0";
+                    if (document.getElementById('setWeek6').checked) payload+="1"; else payload+="0";
+
+                    if (document.getElementById('choseAirOpen').value=="1")
+                    {
+                        payload+="on"+
+                            document.getElementById('temp').value+
+                            document.getElementById('fan').value+
+                            document.getElementById('turbo').value+
+                            document.getElementById('mode').value+
+                            document.getElementById('autoTemp').value;
+                    }
+                    else payload+="off";
+                }
+
+                publish(payload);
+                setTimeout(function () {
+                    // var msg1=msg.split("|");
+                    if (msg.substring(0,15)==(time+"okadd")) 
+                    {
+                        console.log("执行成功");
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("successTask").innerHTML = "添加成功";
+                        setTimeout(function (){document.getElementById("successTask").innerHTML = ""},3000);
+                        asktastlist();
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("successTask").innerHTML = "添加失败";
+                        document.getElementById("state").innerHTML = "离线";
+                        setTimeout(function (){document.getElementById("successTask").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function asktastlist()
+            {
+                var time=getTime();
+                var payload=time+"asklist";
+                
+                publish(payload);
+                setTimeout(function () {
+                    if (msg.substring(0,19)==(time+"okasklist")) 
+                    {
+                        console.log("执行成功");
+                        var msg1=msg.split("|");
+                        analysis(msg1[1],msg1[2]);
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        // document.getElementById("successTask").innerHTML = "添加失败";
+                        // document.getElementById("state").innerHTML = "离线";
+                        // setTimeout(function (){document.getElementById("successTask").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function analysis(msg1,msg2)
+            {
+                console.log(msg1);
+                console.log(msg2);
+                var msgo=msg1.split("#");
+                var msgr=msg2.split("#");
+                console.log(msgo);
+                console.log(msgr);
+                var taskONum=parseInt(msgo[0]);
+                var taskRNum=parseInt(msgr[0]);
+
+                document.getElementById("tableO").innerHTML="";
+                document.getElementById("tableR").innerHTML="";
+                for (var i=1;i<=taskONum;i++)
+                {
+                    console.log(i);
+                    var sDay=msgo[i].substring(0,2)+"-"+
+                        msgo[i].substring(2,4)+" "+
+                        msgo[i].substring(4,6)+":"+
+                        msgo[i].substring(6,8);
+
+                    var sCon;
+                    if (msgo[i][8]=="1") {
+                        // sCon="开机  ";
+                        if (msgo[i][14]=="0")
+                        {
+                            if (msgo[i][13]==0) sCon="自动  ";
+                            if (msgo[i][13]==1) sCon="制冷  ";
+                            if (msgo[i][13]==2) sCon="除湿  ";
+                            if (msgo[i][13]==3) sCon="送风  ";
+                            if (msgo[i][13]==4) sCon="制热  ";
+                            sCon+=msgo[i].substring(9,11)+"度  ";
+
+                            if (msgo[i][12]==1) sCon+="强劲  ";
+                            else
+                            {
+                                if (msgo[i][11]==0) sCon+="风速自动  ";
+                                else sCon+=msgo[i][11]+"级风  ";
+                            }
+                        }
+                        else sCon=msgo[i].substring(14,16)+"度自动恒温  ";
+                    }
+                
+                    if (msgo[i][8]=="0") 
+                    {
+                        sCon="关机 ";
+                    }
+                    console.log(sCon);
+
+                    var oTr=document.createElement("tr");
+                    var oTd1=document.createElement("td");
+                    var oTd2=document.createElement("td");
+                    var oTd3=document.createElement("td");
+                    var oTd4=document.createElement("td");
+                    oTd1.innerHTML=i;
+                    oTd2.innerHTML=sDay;
+                    oTd3.innerHTML=sCon;
+                    oTd4.innerHTML="<u>删除</u>";
+                    oTd4.id="o"+i;
+                    oTr.appendChild(oTd1);
+                    oTr.appendChild(oTd2);
+                    oTr.appendChild(oTd3);
+                    oTr.appendChild(oTd4);
+                    document.getElementById("tableO").appendChild(oTr);
+
+                    oTd4.onclick=function(){
+                        delTask(this.id);
+                        // console.log(this.id);
+                    }
+                }
+
+                for (var i=1;i<=taskRNum;i++) 
+                {
+                    console.log(i);
+                    var sDay=msgr[i].substring(0,2)+":"+
+                        msgr[i].substring(2,4);
+
+                    var Weeks=["日","一","二","三","四","五","六"];
+                    var sWeek="";
+                    for (var j=1;j<7;j++)
+                        if (msgr[i][4+j]=="1") sWeek+=Weeks[j];
+                    if (msgr[i][4]=="1") sWeek+=Weeks[0];
+
+                    var sCon;
+                    if (msgr[i][11]=="1") {
+                        // sCon="开机  ";
+                        if (msgr[i][17]=="0") 
+                        {
+                            if (msgr[i][16]==0) sCon="自动  ";
+                            if (msgr[i][16]==1) sCon="制冷  ";
+                            if (msgr[i][16]==2) sCon="除湿  ";
+                            if (msgr[i][16]==3) sCon="送风  ";
+                            if (msgr[i][16]==4) sCon="制热  ";
+                            sCon+=msgr[i].substring(12,14)+"度  ";
+
+                            if (msgr[i][15]==1) sCon+="强劲  ";
+                            else
+                            {
+                                if (msgr[i][14]==0) sCon+="风速自动  ";
+                                else sCon+=msgr[i][14]+"级风  ";
+                            }
+                        }
+                        else sCon=msgr[i].substring(17,19)+"度自动恒温  ";
+                    }
+                
+                    if (msgr[i][11]=="0") 
+                    {
+                        sCon="关机 ";
+                    }
+                    console.log(sCon);
+
+                    var oTr=document.createElement("tr");
+                    var oTd1=document.createElement("td");
+                    var oTd2=document.createElement("td");
+                    var oTd3=document.createElement("td");
+                    var oTd4=document.createElement("td");
+                    var oTd5=document.createElement("td");
+                    oTd1.innerHTML=i;
+                    oTd2.innerHTML=sDay;
+                    oTd3.innerHTML=sWeek;
+                    oTd4.innerHTML=sCon;
+                    oTd5.innerHTML="<u>删除</u>";
+                    oTd5.id="r"+i;
+                    oTr.appendChild(oTd1);
+                    oTr.appendChild(oTd2);
+                    oTr.appendChild(oTd3);
+                    oTr.appendChild(oTd4);
+                    oTr.appendChild(oTd5);
+                    document.getElementById("tableR").appendChild(oTr);
+
+                    oTd5.onclick=function(){
+                        delTask(this.id);
+                        // console.log(this.id);
+                    }
+                }
+            }
+
+            function delTask(num)
+            {
+                var time=getTime();
+                var payload=time+"delTask"+num;
+                
+                publish(payload);
+                setTimeout(function () {
+                    if (msg.substring(0,19)==(time+"okdelTask")) 
+                    {
+                        var msg1=msg.split("|");
+                        analysis(msg1[1],msg1[2]);
+                        console.log("删除成功");
+                        document.getElementById("successTask").innerHTML = "删除成功";
+                        setTimeout(function (){document.getElementById("successTask").innerHTML = ""},3000);
+                        // asktastlist();
+                    }
+                    else 
+                    {
+                        console.log("执行失败");
+                        document.getElementById("successTask").innerHTML = "删除失败";
+                        document.getElementById("state").innerHTML = "离线";
+                        setTimeout(function (){document.getElementById("successTask").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+
+            function delList()
+            {
+                var time=getTime();
+                var payload=time+"delList";
+                
+                publish(payload);
+                setTimeout(function () {
+                    if (msg.substring(0,19)==(time+"okdelList")) 
+                    {
+                        console.log("删除成功");
+                        document.getElementById("state").innerHTML = "在线";
+                        document.getElementById("successDebug").innerHTML = "删除成功";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                    }
+                    else 
+                    {
+                        console.log("删除失败");
+                        document.getElementById("state").innerHTML = "离线";
+                        document.getElementById("successDebug").innerHTML = "删除失败";
+                        setTimeout(function (){document.getElementById("successDebug").innerHTML = ""},3000);
+                    }
+                }, 1000);
+            }
+        </script>
+    </head>
+
+    <body style="font-size:10;">
+        <p>当前设备状态：<span id="state">获取中...</span><br/></p>
+        <p>上一次指令：<span id="lastC">获取中...</span><br/></p>
+        <p>室温：<span id="tem">获取中...</span><br/></p>
+        <p>温度：
+            <select id="temp" class="select">
+                <option>28</option>
+                <option>27</option>
+                <option>26</option>
+                <option>25</option>
+                <option selected>24</option>
+                <option>23</option>
+                <option>22</option>
+                <option>21</option>
+                <option>20</option>
+                <option>19</option>
+                <option>18</option>
+                <option>17</option>
+                <option>16</option>
+            </select>&nbsp;&nbsp;&nbsp;
+            风速：
+            <select id="fan" class="select">
+                <option value="0">自动</option>
+                <option>1</option>
+                <option>2</option>
+                <option>3</option>
+                <option>4</option>
+                <option selected>5</option>
+            </select>
+        </p>
+        <p>强劲：
+            <select id="turbo" class="select">
+                <option value="0">关</option>
+                <option value="1" selected>开</option>
+            </select>&nbsp;&nbsp;&nbsp;
+            模式：
+            <select id="mode" class="select">
+                <option value="0">自动</option>
+                <option value="1" selected>制冷</option>
+                <option value="2">除湿</option>
+                <option value="3">送风</option>
+                <option value="4">制热</option>
+            </select>
+        </p>
+        <p>自动恒温：
+            <select id="autoTemp" class="select">
+                <option value="00" selected>关闭</option>
+                <option>28</option>
+                <option>27</option>
+                <option>26</option>
+                <option>25</option>
+            </select>
+        </p>
+        
+        <p><button onclick="openair()" class="button">开</button>
+        <button onclick="closeair()" class="button">关</button>
+        <button onclick="refresh()" class="button">刷新</button></p>
+        <p><span id="success"></span><br/></p>
+        <p>MsgSend:<span id="msgSend"></span><br/></p>
+        <p>MsgReceive:<span id="msgReceive"></span><br/></p>
+        
+        <canvas id="myChart" width="30" height="20"></canvas>
+
+        <h3>计划任务</h3>
+        <div id="tasklist">
+        </div>
+
+        <div id="table">
+            <h4>单次计划</h4>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>时间</th>
+                        <th>计划</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableO">
+                </tbody>
+            </table>
+            <h4>重复计划</h4>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>时间</th>
+                        <th>星期</th>
+                        <th>计划</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableR">
+                </tbody>
+            </table>
+        </div>
+
+        <h4>新建计划</h4>
+        <p>
+            <input id="taskTypeO" type="radio" name="taskType" class="radio" value="o" onchange="taskType()">单次计划
+            <input id="taskTypeR" type="radio" name="taskType" class="radio" value="r" onchange="taskType()">重复计划
+            
+            <!-- <select style="width: 100px;" id="taskType" class="select">
+                <option value="o">单次任务</option>
+                <option value="r" selected>重复任务</option>
+            </select> -->
+        </p>
+        <p id="taskTypeOSetTime" style="display:none">设置时间：<input id="setESPTime1" type="datetime-local" /></p>
+        <p id="taskTypeRSetTime" style="display:none">设置时间：<input id="setESPTime2" type="time" /></p>
+        <p id="taskTypeRSetWeek" style="display:none">设置星期：
+            <input id="setWeek1" type="checkbox" name="setWeek" class="checkbox" checked>一
+            <input id="setWeek2" type="checkbox" name="setWeek" class="checkbox" checked>二
+            <input id="setWeek3" type="checkbox" name="setWeek" class="checkbox" checked>三
+            <input id="setWeek4" type="checkbox" name="setWeek" class="checkbox" checked>四
+            <input id="setWeek5" type="checkbox" name="setWeek" class="checkbox" checked>五
+            <input id="setWeek6" type="checkbox" name="setWeek" class="checkbox" checked>六
+            <input id="setWeek0" type="checkbox" name="setWeek" class="checkbox" checked>日
+        </p>
+        <p id="taskChoseAirOpen" style="display:none">
+            空调开关：
+            <select id="choseAirOpen" class="select">
+                <option value="0">关</option>
+                <option value="1" selected>开</option>
+            </select>
+        </p>
+        <p><button id="taskSub" style="display:none" onclick="subTask()" class="button">提交</button></p>
+        <p><span id="successTask"></span><br/></p>
+
+        <h3>Debug</h3>
+        <p>网页版本：2.1.0 &nbsp&nbsp&nbsp 更新时间：2023-9-12 19:30:43</p>
+        <p>固件版本：2.0.3 &nbsp&nbsp&nbsp 编译时间：2023-9-12 20:20:34</p>
+        <p>ESP日期：<span id="espDate">获取中...</span><br/></p>
+        <p>回复：<span id="ans">无</span><br/></p>
+        <p><button onclick="rest()" class="button">复位</button><br/></p>
+        <p>设置星期：
+            <select style="width: 90px;" id="setWeek" class="select">
+                <option value="0" selected>星期天</option>
+                <option value="1">星期一</option>
+                <option value="2">星期二</option>
+                <option value="3">星期三</option>
+                <option value="4">星期四</option>
+                <option value="5">星期五</option>
+                <option value="6">星期六</option>
+            </select>
+            <button onclick="setWeek()" class="button">设置</button>   
+        </p>
+        <p><button onclick="delList()" class="button">清空计划</button></p>
+        <p><span id="successDebug"></span><br/></p>
+    </body>
+</html>
